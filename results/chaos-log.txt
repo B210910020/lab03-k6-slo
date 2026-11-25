@@ -1,0 +1,4 @@
+21:16:54 killing server pid=18412
+SUCCESS: The process with PID 18412 has been terminated.
+21:17:04 server restarted
+k6 exit=99

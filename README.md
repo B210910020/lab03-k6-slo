@@ -5,6 +5,11 @@
 
 Орчин: Windows 11 + Git Bash, API нь зөвхөн `localhost:3000` дээр.
 
+```
+$ k6 version
+k6.exe v2.4.0 (commit/dd9395906d, go1.26.11, windows/amd64)
+```
+
 ---
 
 ## 1. Гурван сценарио (6 хэсэгтэй формат)
@@ -36,3 +41,30 @@
 - **450 мс** — sleep дээд тал 400 мс + сүлжээ/event loop-ийн 50 мс.
 
 **Error budget (цагаар):** 2 мин × (1 − 0.90) = **12 секунд** зогсох эрх.
+
+## 3. PASS гаралт — `results/pass.txt`
+
+`k6 run slo-test.js` (20 VU, 1 мин) — бүх threshold ✓, exit 0:
+
+| Threshold | Үр дүн |
+|---|---|
+| `http_req_duration{name:cart}` p(95)<50 | ✓ p(95)=1.63ms |
+| `http_req_failed{name:pay}` rate<0.08 | ✓ 3.76% |
+| `checks` rate>0.90 | ✓ 98.74% (2752 / 2787) |
+| `http_req_duration{name:report}` p(95)<450 | ✓ p(95)=396.92ms |
+
+## 4. Mini chaos — `results/chaos.txt`
+
+`DURATION=2m k6 run slo-test.js` ажиллаж байхад 45 дахь секундэд серверийг kill хийж, 10с дараа дахин асаасан ([chaos.sh](chaos.sh)).
+
+| Threshold | Үр дүн |
+|---|---|
+| `checks` rate>0.90 (availability) | **✗ 87.22%** (4951 / 5676) |
+| `http_req_failed{name:pay}` rate<0.08 (reliability) | **✗ 16.12%** |
+| `http_req_duration{name:cart}` p(95)<50 | ✓ 1.39ms |
+| `http_req_duration{name:report}` p(95)<450 | ✓ 396.3ms |
+
+- **Бодит availability (хүсэлтээр):** 4951 / 5676 = **87.22%** → SLO (90%) зөрчигдсөн, k6 exit 99.
+- **Error budget (хүсэлтээр):** 5676 × 10% = 567 хүсэлт; бодит алдаа `http_req_failed` = 725 → budget хэтэрсэн.
+- **Яагаад цагийн budget-ээс зөрөв:** 10с зогсолт нь 2 минутын 8.3% тул цагаар 12с-ийн budget-д багтана. Гэвч зогсолтын үед хүсэлт `connection refused`-ээр агшин зуур буцаж, `/report`-ын 200–400мс хүлээлт алга болдог тул тэр 10 секундэд хэвийнээс олон хүсэлт (бүгд алдаа) явсан — хүсэлтийн хувь цагийн хувиас муу гарна.
+- **Reliability мөн FAIL:** унасан үед `/pay` бүр алддаг тул нэг эвдрэл хоёр SLO-г зэрэг зөрчсөн. Тусгаарлахын тулд reliability SLI-г зөвхөн серверээс ирсэн хариунд (`status != 0`, жишээ нь 5xx / нийт хариу) тооцож, холболтын алдааг availability-д үлдээж болно.
