@@ -1,0 +1,28 @@
+// Лаб 3 — SLO-г k6 threshold болгосон скрипт.
+// Endpoint бүрийг name tag-аар ялгаж, threshold-ыг tag тус бүрд тавьсан.
+// README-ийн SLO хүснэгтийн босготой ЯГ ИЖИЛ тоонууд.
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+
+export const options = {
+  vus: 20,
+  duration: __ENV.DURATION || '1m',   // chaos туршилтад: DURATION=2m
+  thresholds: {
+    'http_req_duration{name:cart}':   ['p(95)<50'],   // Performance SLO
+    'http_req_failed{name:pay}':      ['rate<0.08'],  // Reliability SLO
+    'checks':                         ['rate>0.90'],  // Availability SLO
+    'http_req_duration{name:report}': ['p(95)<450'],  // Нэмэлт (4-р) сценарио
+  },
+};
+
+export default function () {
+  const base = 'http://localhost:3000';
+  const c = http.post(`${base}/cart/add`, null, { tags: { name: 'cart' } });
+  const r = http.get(`${base}/report`,          { tags: { name: 'report' } });
+  const p = http.post(`${base}/pay`, null,      { tags: { name: 'pay' } });
+
+  check(c, { 'cart 200':   (x) => x.status === 200 });
+  check(r, { 'report 200': (x) => x.status === 200 });
+  check(p, { 'pay 200':    (x) => x.status === 200 });
+  sleep(1);
+}
